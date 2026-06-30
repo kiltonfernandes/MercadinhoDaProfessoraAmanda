@@ -4,6 +4,7 @@ import {
   Archive,
   BadgeDollarSign,
   Check,
+  ChevronLeft,
   ChevronRight,
   CircleDollarSign,
   Download,
@@ -34,6 +35,21 @@ type CustomerDraft = Omit<Customer, 'id' | 'balance'>
 
 const productEmojis = ['🍎', '🍌', '🍓', '🥕', '🥛', '🧃', '🥖', '🧀', '🍪', '🍫', '🧸', '✏️']
 const customerEmojis = ['🧒🏻', '🧒🏽', '👦🏻', '👧🏽', '👦🏿', '👧🏻', '🧑🏽', '👩🏻']
+const CHECKOUT_CUSTOMER_PAGE_SIZE = 8
+const CHECKOUT_PRODUCT_PAGE_SIZE = 12
+
+const searchable = (value: string | number) => String(value)
+  .normalize('NFD')
+  .replace(/[\u0300-\u036f]/g, '')
+  .toLocaleLowerCase('pt-BR')
+  .trim()
+
+const matchesSearch = (query: string, ...values: Array<string | number>) => {
+  const terms = searchable(query).split(/\s+/).filter(Boolean)
+  if (!terms.length) return true
+  const content = searchable(values.join(' '))
+  return terms.every((term) => content.includes(term))
+}
 
 function Modal({ title, onClose, children }: { title: string; onClose: () => void; children: React.ReactNode }) {
   useEffect(() => {
@@ -295,10 +311,39 @@ function Customers({ customers, onAdd, onEdit, onDelete, onBehavior, onPay }: { 
   )
 }
 
+function Pagination({ page, totalPages, totalItems, label, onChange }: { page: number; totalPages: number; totalItems: number; label: string; onChange: (page: number) => void }) {
+  if (totalPages <= 1) return <span className="result-count">{totalItems} {label}</span>
+  return (
+    <div className="pagination" aria-label={`Paginação de ${label}`}>
+      <span>{totalItems} {label} · Página {page} de {totalPages}</span>
+      <button onClick={() => onChange(page - 1)} disabled={page === 1} aria-label="Página anterior"><ChevronLeft /></button>
+      <button onClick={() => onChange(page + 1)} disabled={page === totalPages} aria-label="Próxima página"><ChevronRight /></button>
+    </div>
+  )
+}
+
 function Checkout({ products, customers, onFinish }: { products: Product[]; customers: Customer[]; onFinish: (id: string, items: SaleItem[], total: number) => void }) {
   const [customerId, setCustomerId] = useState('')
   const [cart, setCart] = useState<Record<string, number>>({})
-  const availableProducts = products.filter((item) => item.stock > 0)
+  const [customerSearch, setCustomerSearch] = useState('')
+  const [productSearch, setProductSearch] = useState('')
+  const [customerPage, setCustomerPage] = useState(1)
+  const [productPage, setProductPage] = useState(1)
+  const availableProducts = useMemo(() => products.filter((item) => item.stock > 0), [products])
+  const filteredCustomers = useMemo(
+    () => customers.filter((item) => matchesSearch(customerSearch, item.name, item.age, item.emoji)),
+    [customerSearch, customers],
+  )
+  const filteredProducts = useMemo(
+    () => availableProducts.filter((item) => matchesSearch(productSearch, item.name, item.emoji, item.price)),
+    [availableProducts, productSearch],
+  )
+  const customerTotalPages = Math.max(1, Math.ceil(filteredCustomers.length / CHECKOUT_CUSTOMER_PAGE_SIZE))
+  const productTotalPages = Math.max(1, Math.ceil(filteredProducts.length / CHECKOUT_PRODUCT_PAGE_SIZE))
+  const currentCustomerPage = Math.min(customerPage, customerTotalPages)
+  const currentProductPage = Math.min(productPage, productTotalPages)
+  const visibleCustomers = filteredCustomers.slice((currentCustomerPage - 1) * CHECKOUT_CUSTOMER_PAGE_SIZE, currentCustomerPage * CHECKOUT_CUSTOMER_PAGE_SIZE)
+  const visibleProducts = filteredProducts.slice((currentProductPage - 1) * CHECKOUT_PRODUCT_PAGE_SIZE, currentProductPage * CHECKOUT_PRODUCT_PAGE_SIZE)
   const customer = customers.find((item) => item.id === customerId)
   const items = useMemo(() => products.filter((p) => cart[p.id]).map((p) => ({ productId: p.id, name: p.name, emoji: p.emoji, quantity: cart[p.id], unitPrice: p.price })), [cart, products])
   const total = items.reduce((sum, item) => sum + item.quantity * item.unitPrice, 0)
@@ -313,9 +358,17 @@ function Checkout({ products, customers, onFinish }: { products: Product[]; cust
       <div className="checkout-grid">
         <div className="shop-panel">
           <div className="step-title"><span>1</span><div><h3>Quem está comprando?</h3><p>Escolha um cliente da turminha.</p></div></div>
-          <div className="customer-picker">{customers.map((item) => <button key={item.id} className={customerId === item.id ? 'selected' : ''} onClick={() => setCustomerId(item.id)}><span>{item.emoji}</span><strong>{item.name}</strong><small>{money.format(Math.max(0, item.creditLimit - item.balance))} livres</small>{customerId === item.id && <i><Check /></i>}</button>)}</div>
+          <div className="checkout-browser">
+            <label className="checkout-search"><Search /><input value={customerSearch} onChange={(e) => { setCustomerSearch(e.target.value); setCustomerPage(1) }} placeholder="Buscar por nome, idade ou avatar..." aria-label="Buscar clientes no caixa" /></label>
+            <Pagination page={currentCustomerPage} totalPages={customerTotalPages} totalItems={filteredCustomers.length} label={filteredCustomers.length === 1 ? 'cliente' : 'clientes'} onChange={setCustomerPage} />
+          </div>
+          {visibleCustomers.length ? <div className="customer-picker">{visibleCustomers.map((item) => <button key={item.id} className={customerId === item.id ? 'selected' : ''} onClick={() => setCustomerId(item.id)}><span>{item.emoji}</span><strong>{item.name}</strong><small>{money.format(Math.max(0, item.creditLimit - item.balance))} livres</small>{customerId === item.id && <i><Check /></i>}</button>)}</div> : <div className="checkout-no-results"><span>🔎</span><p>Nenhum cliente encontrado.</p></div>}
           <div className="step-title products-step"><span>2</span><div><h3>O que vai na cesta?</h3><p>Use os botões para escolher as quantidades.</p></div></div>
-          {availableProducts.length ? <div className="checkout-products">{availableProducts.map((item) => <article key={item.id}><span className="checkout-emoji">{item.emoji}</span><div><h4>{item.name}</h4><strong>{money.format(item.price)}</strong><small>{item.stock} disponíveis</small></div><div className="quantity"><button onClick={() => change(item, -1)} disabled={!cart[item.id]}><Minus /></button><b>{cart[item.id] || 0}</b><button onClick={() => change(item, 1)} disabled={(cart[item.id] || 0) >= item.stock}><Plus /></button></div></article>)}</div> : <EmptyState emoji="📦" title="As prateleiras estão vazias" text="Reponha o estoque para fazer uma venda." />}
+          <div className="checkout-browser">
+            <label className="checkout-search"><Search /><input value={productSearch} onChange={(e) => { setProductSearch(e.target.value); setProductPage(1) }} placeholder="Buscar produto, emoji ou preço..." aria-label="Buscar produtos no caixa" /></label>
+            <Pagination page={currentProductPage} totalPages={productTotalPages} totalItems={filteredProducts.length} label={filteredProducts.length === 1 ? 'produto' : 'produtos'} onChange={setProductPage} />
+          </div>
+          {visibleProducts.length ? <div className="checkout-products">{visibleProducts.map((item) => <article key={item.id}><span className="checkout-emoji">{item.emoji}</span><div><h4>{item.name}</h4><strong>{money.format(item.price)}</strong><small>{item.stock} disponíveis</small></div><div className="quantity"><button onClick={() => change(item, -1)} disabled={!cart[item.id]}><Minus /></button><b>{cart[item.id] || 0}</b><button onClick={() => change(item, 1)} disabled={(cart[item.id] || 0) >= item.stock}><Plus /></button></div></article>)}</div> : availableProducts.length ? <div className="checkout-no-results"><span>🔎</span><p>Nenhum produto encontrado.</p></div> : <EmptyState emoji="📦" title="As prateleiras estão vazias" text="Reponha o estoque para fazer uma venda." />}
         </div>
         <aside className="receipt">
           <div className="receipt-top"><span>🧺</span><div><small>Resumo da</small><h3>Comprinha</h3></div></div>
