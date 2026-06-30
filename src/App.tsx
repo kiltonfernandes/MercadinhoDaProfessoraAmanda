@@ -1,4 +1,5 @@
-import { useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import {
   Archive,
   BadgeDollarSign,
@@ -35,16 +36,29 @@ const productEmojis = ['🍎', '🍌', '🍓', '🥕', '🥛', '🧃', '🥖', '
 const customerEmojis = ['🧒🏻', '🧒🏽', '👦🏻', '👧🏽', '👦🏿', '👧🏻', '🧑🏽', '👩🏻']
 
 function Modal({ title, onClose, children }: { title: string; onClose: () => void; children: React.ReactNode }) {
-  return (
-    <div className="modal-backdrop" role="presentation" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
-      <section className="modal" role="dialog" aria-modal="true" aria-label={title}>
-        <header className="modal-head">
+  useEffect(() => {
+    const previousOverflow = document.body.style.overflow
+    const closeOnEscape = (event: KeyboardEvent) => event.key === 'Escape' && onClose()
+    document.body.style.overflow = 'hidden'
+    document.addEventListener('keydown', closeOnEscape)
+
+    return () => {
+      document.body.style.overflow = previousOverflow
+      document.removeEventListener('keydown', closeOnEscape)
+    }
+  }, [onClose])
+
+  return createPortal(
+    <div className="mercadinho-dialog-overlay" role="presentation" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
+      <section className="mercadinho-dialog-panel" role="dialog" aria-modal="true" aria-label={title}>
+        <header className="mercadinho-dialog-head">
           <div><span className="eyebrow">Mercadinho</span><h2>{title}</h2></div>
           <button className="icon-button" onClick={onClose} aria-label="Fechar"><X size={22} /></button>
         </header>
         {children}
       </section>
-    </div>
+    </div>,
+    document.body,
   )
 }
 
