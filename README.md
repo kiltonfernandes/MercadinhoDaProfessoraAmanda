@@ -9,8 +9,10 @@ Um ponto de venda educativo, lúdico e 100% em português do Brasil. O Mercadinh
 
 ## ✨ O que o aplicativo faz
 
-- cadastra produtos com nome, emoji, preço em reais e estoque;
-- cadastra clientes com nome, idade, avatar, limite de crédito e indicadores de comportamento;
+- cadastra produtos com nome, qualquer emoji Unicode, preço em reais e estoque;
+- oferece biblioteca completa de emojis com busca em português, categorias e itens recentes;
+- cadastra clientes com nome, idade, avatar personalizável, limite de crédito e indicadores de comportamento;
+- permite escolher avatares entre rostos, pessoas, profissões e diferentes tons de pele;
 - registra boas atitudes e pontos a melhorar;
 - monta uma cesta, respeita o estoque e impede compras acima do crédito disponível;
 - adiciona automaticamente cada compra ao saldo do cliente;

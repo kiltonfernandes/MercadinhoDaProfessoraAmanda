@@ -301,9 +301,29 @@ main { min-width: 0; }
 .form label, .form legend { color: #6e5c50; font-size: 10px; font-weight: 800; }
 .form input { width: 100%; margin-top: 6px; border: 1px solid #ded1c0; border-radius: 11px; background: white; padding: 11px 12px; color: var(--ink); }
 .form fieldset { border: 0; padding: 0; margin: 0; }
-.emoji-picker { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 7px; }
-.emoji-picker button { width: 42px; height: 42px; padding: 0; border: 2px solid transparent; border-radius: 11px; background: #f5ede3; font-size: 22px; cursor: pointer; }
-.emoji-picker button.selected { border-color: var(--peach); background: #fce6dc; transform: translateY(-2px); }
+.emoji-choice { width: 100%; min-height: 66px; margin-top: 7px; padding: 9px 12px; display: flex; align-items: center; gap: 12px; border: 1px solid #ded1c0; border-radius: 14px; background: #faf4ea; text-align: left; cursor: pointer; }
+.emoji-choice:hover { border-color: var(--peach); background: #fcece3; }
+.emoji-choice > span { flex: 0 0 auto; width: 47px; height: 47px; display: grid; place-items: center; border-radius: 13px; background: white; box-shadow: 0 3px 10px rgba(78, 55, 38, .08); font-size: 28px; }
+.emoji-choice > div { min-width: 0; flex: 1; }
+.emoji-choice strong, .emoji-choice small { display: block; }
+.emoji-choice strong { font-size: 11px; }
+.emoji-choice small { margin-top: 2px; color: var(--muted); font-size: 9px; font-weight: 600; }
+.emoji-choice > svg { width: 17px; color: #9a887a; transition: transform .15s ease; }
+.emoji-choice > svg.rotated { transform: rotate(90deg); }
+.avatar-choice > span { background: #f8e7d5; font-size: 31px; }
+.emoji-loading { min-height: 160px; margin-top: 9px; display: grid; place-items: center; border-radius: 14px; background: #f7f1e8; color: var(--muted); font-size: 10px; }
+.full-emoji-picker { margin-top: 9px; overflow: hidden; border: 1px solid #ded1c0; border-radius: 15px; background: white; }
+.full-emoji-picker .EmojiPickerReact {
+  --epr-bg-color: #fffdf8;
+  --epr-category-label-bg-color: rgba(255, 253, 248, .92);
+  --epr-hover-bg-color: #f8e5dc;
+  --epr-focus-bg-color: #f8e5dc;
+  --epr-highlight-color: #df7658;
+  --epr-search-input-bg-color: #f8f2e9;
+  border: 0 !important;
+  font-family: 'Nunito', sans-serif !important;
+}
+.full-emoji-picker .epr-search-container input { font-family: 'Nunito', sans-serif; }
 .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 13px; }
 .input-prefix { display: flex; align-items: center; margin-top: 6px; overflow: hidden; border: 1px solid #ded1c0; border-radius: 11px; background: white; }
 .input-prefix span { padding-left: 12px; color: var(--muted); font-size: 11px; }
@@ -371,6 +391,8 @@ main { min-width: 0; }
   .transaction-list article { padding: 13px; gap: 10px; }
   .form-row { grid-template-columns: 1fr; }
   .form { padding: 20px; }
+  .emoji-choice small { white-space: normal; }
+  .full-emoji-picker .EmojiPickerReact { height: 320px !important; }
   .mercadinho-dialog-overlay { padding: 10px !important; }
   .mercadinho-dialog-panel { max-height: calc(100dvh - 20px); border-radius: 20px; }
   .mercadinho-dialog-head { padding: 18px 20px; }

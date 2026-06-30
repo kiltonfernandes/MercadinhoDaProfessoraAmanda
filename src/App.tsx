@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import {
   Archive,
@@ -33,8 +33,7 @@ type Page = 'inicio' | 'produtos' | 'clientes' | 'caixa' | 'historico'
 type ProductDraft = Omit<Product, 'id'>
 type CustomerDraft = Omit<Customer, 'id' | 'balance'>
 
-const productEmojis = ['🍎', '🍌', '🍓', '🥕', '🥛', '🧃', '🥖', '🧀', '🍪', '🍫', '🧸', '✏️']
-const customerEmojis = ['🧒🏻', '🧒🏽', '👦🏻', '👧🏽', '👦🏿', '👧🏻', '🧑🏽', '👩🏻']
+const EmojiSelector = lazy(() => import('./EmojiSelector'))
 const CHECKOUT_CUSTOMER_PAGE_SIZE = 8
 const CHECKOUT_PRODUCT_PAGE_SIZE = 12
 
@@ -398,14 +397,51 @@ function Transactions({ transactions }: { transactions: Transaction[] }) {
 
 function ProductForm({ product, onClose, onSave }: { product: Product | null; onClose: () => void; onSave: (p: ProductDraft) => void }) {
   const [form, setForm] = useState<ProductDraft>(product ? { name: product.name, emoji: product.emoji, price: product.price, stock: product.stock } : { name: '', emoji: '🍎', price: 0, stock: 0 })
+  const [pickerOpen, setPickerOpen] = useState(false)
   const submit = (e: React.FormEvent) => { e.preventDefault(); if (form.name.trim() && form.price >= 0 && form.stock >= 0) onSave({ ...form, name: form.name.trim() }) }
-  return <Modal title={product ? 'Editar produto' : 'Novo produto'} onClose={onClose}><form className="form" onSubmit={submit}><label>Nome do produto<input autoFocus required maxLength={40} value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="Ex.: Suco de uva" /></label><fieldset><legend>Escolha um emoji</legend><div className="emoji-picker">{productEmojis.map((emoji) => <button type="button" className={form.emoji === emoji ? 'selected' : ''} key={emoji} onClick={() => setForm({ ...form, emoji })}>{emoji}</button>)}</div></fieldset><div className="form-row"><label>Preço em reais<div className="input-prefix"><span>R$</span><input required min="0" step="0.01" type="number" value={form.price} onChange={(e) => setForm({ ...form, price: Number(e.target.value) })} /></div></label><label>Estoque<input required min="0" step="1" type="number" value={form.stock} onChange={(e) => setForm({ ...form, stock: Number(e.target.value) })} /></label></div><div className="form-actions"><button type="button" onClick={onClose}>Cancelar</button><button className="primary" type="submit"><Check /> Salvar produto</button></div></form></Modal>
+  return (
+    <Modal title={product ? 'Editar produto' : 'Novo produto'} onClose={onClose}>
+      <form className="form" onSubmit={submit}>
+        <label>Nome do produto<input autoFocus required maxLength={40} value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="Ex.: Suco de uva" /></label>
+        <fieldset>
+          <legend>Emoji do produto</legend>
+          <button className="emoji-choice" type="button" onClick={() => setPickerOpen((open) => !open)}>
+            <span>{form.emoji}</span>
+            <div><strong>{pickerOpen ? 'Fechar biblioteca' : 'Escolher outro emoji'}</strong><small>Todos os emojis, categorias e busca</small></div>
+            <ChevronRight className={pickerOpen ? 'rotated' : ''} />
+          </button>
+          {pickerOpen && <Suspense fallback={<div className="emoji-loading">Carregando biblioteca de emojis…</div>}><EmojiSelector mode="product" onChange={(emoji) => { setForm({ ...form, emoji }); setPickerOpen(false) }} /></Suspense>}
+        </fieldset>
+        <div className="form-row"><label>Preço em reais<div className="input-prefix"><span>R$</span><input required min="0" step="0.01" type="number" value={form.price} onChange={(e) => setForm({ ...form, price: Number(e.target.value) })} /></div></label><label>Estoque<input required min="0" step="1" type="number" value={form.stock} onChange={(e) => setForm({ ...form, stock: Number(e.target.value) })} /></label></div>
+        <div className="form-actions"><button type="button" onClick={onClose}>Cancelar</button><button className="primary" type="submit"><Check /> Salvar produto</button></div>
+      </form>
+    </Modal>
+  )
 }
 
 function CustomerForm({ customer, onClose, onSave }: { customer: Customer | null; onClose: () => void; onSave: (c: CustomerDraft) => void }) {
   const [form, setForm] = useState<CustomerDraft>(customer ? { name: customer.name, age: customer.age, emoji: customer.emoji, goodBehavior: customer.goodBehavior, badBehavior: customer.badBehavior, creditLimit: customer.creditLimit } : { name: '', age: 7, emoji: '🧒🏽', goodBehavior: 0, badBehavior: 0, creditLimit: 20 })
+  const [pickerOpen, setPickerOpen] = useState(false)
   const submit = (e: React.FormEvent) => { e.preventDefault(); if (form.name.trim() && form.age > 0 && form.creditLimit >= 0) onSave({ ...form, name: form.name.trim() }) }
-  return <Modal title={customer ? 'Editar cliente' : 'Novo cliente'} onClose={onClose}><form className="form" onSubmit={submit}><label>Nome da criança<input autoFocus required maxLength={50} value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="Ex.: Marina" /></label><fieldset><legend>Escolha um avatar</legend><div className="emoji-picker">{customerEmojis.map((emoji) => <button type="button" className={form.emoji === emoji ? 'selected' : ''} key={emoji} onClick={() => setForm({ ...form, emoji })}>{emoji}</button>)}</div></fieldset><div className="form-row"><label>Idade<input required min="1" max="99" type="number" value={form.age} onChange={(e) => setForm({ ...form, age: Number(e.target.value) })} /></label><label>Limite de crédito<div className="input-prefix"><span>R$</span><input required min="0" step="0.01" type="number" value={form.creditLimit} onChange={(e) => setForm({ ...form, creditLimit: Number(e.target.value) })} /></div></label></div><div className="form-row"><label>⭐ Boas atitudes<input required min="0" step="1" type="number" value={form.goodBehavior} onChange={(e) => setForm({ ...form, goodBehavior: Number(e.target.value) })} /></label><label>🌧️ A melhorar<input required min="0" step="1" type="number" value={form.badBehavior} onChange={(e) => setForm({ ...form, badBehavior: Number(e.target.value) })} /></label></div><div className="form-actions"><button type="button" onClick={onClose}>Cancelar</button><button className="primary" type="submit"><Check /> Salvar cliente</button></div></form></Modal>
+  return (
+    <Modal title={customer ? 'Editar cliente' : 'Novo cliente'} onClose={onClose}>
+      <form className="form" onSubmit={submit}>
+        <label>Nome da criança<input autoFocus required maxLength={50} value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="Ex.: Marina" /></label>
+        <fieldset>
+          <legend>Avatar da criança</legend>
+          <button className="emoji-choice avatar-choice" type="button" onClick={() => setPickerOpen((open) => !open)}>
+            <span>{form.emoji}</span>
+            <div><strong>{pickerOpen ? 'Fechar criador' : 'Personalizar avatar'}</strong><small>Rostos, pessoas, profissões e tons de pele</small></div>
+            <ChevronRight className={pickerOpen ? 'rotated' : ''} />
+          </button>
+          {pickerOpen && <Suspense fallback={<div className="emoji-loading">Carregando criador de avatar…</div>}><EmojiSelector mode="avatar" onChange={(emoji) => { setForm({ ...form, emoji }); setPickerOpen(false) }} /></Suspense>}
+        </fieldset>
+        <div className="form-row"><label>Idade<input required min="1" max="99" type="number" value={form.age} onChange={(e) => setForm({ ...form, age: Number(e.target.value) })} /></label><label>Limite de crédito<div className="input-prefix"><span>R$</span><input required min="0" step="0.01" type="number" value={form.creditLimit} onChange={(e) => setForm({ ...form, creditLimit: Number(e.target.value) })} /></div></label></div>
+        <div className="form-row"><label>⭐ Boas atitudes<input required min="0" step="1" type="number" value={form.goodBehavior} onChange={(e) => setForm({ ...form, goodBehavior: Number(e.target.value) })} /></label><label>🌧️ A melhorar<input required min="0" step="1" type="number" value={form.badBehavior} onChange={(e) => setForm({ ...form, badBehavior: Number(e.target.value) })} /></label></div>
+        <div className="form-actions"><button type="button" onClick={onClose}>Cancelar</button><button className="primary" type="submit"><Check /> Salvar cliente</button></div>
+      </form>
+    </Modal>
+  )
 }
 
 export default App
