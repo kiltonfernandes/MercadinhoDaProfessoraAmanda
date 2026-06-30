@@ -13,6 +13,7 @@ Um ponto de venda educativo, lúdico e 100% em português do Brasil. O Mercadinh
 - oferece biblioteca completa de emojis com busca em português, categorias e itens recentes;
 - cadastra clientes com nome, idade, avatar personalizável, limite de crédito e indicadores de comportamento;
 - permite escolher avatares entre rostos, pessoas, profissões e diferentes tons de pele;
+- exige comentário em cada novo registro de comportamento e cria uma linha do tempo no perfil da criança;
 - registra boas atitudes e pontos a melhorar;
 - monta uma cesta, respeita o estoque e impede compras acima do crédito disponível;
 - adiciona automaticamente cada compra ao saldo do cliente;
@@ -179,7 +180,7 @@ Cada novo push na branch conectada gera um novo deploy automaticamente. Como os 
 - estoque e valores nunca podem ser negativos;
 - uma venda só é concluída se houver unidades suficientes;
 - o total da compra não pode ultrapassar o crédito disponível;
-- excluir um cliente com saldo pendente é bloqueado;
+- excluir um cliente com saldo pendente cria uma baixa de encerramento no histórico antes de remover o cadastro;
 - excluir clientes e produtos não apaga transações antigas;
 - pagamentos nunca podem ser maiores que o saldo atual;
 - preço zero é permitido para atividades com itens gratuitos;

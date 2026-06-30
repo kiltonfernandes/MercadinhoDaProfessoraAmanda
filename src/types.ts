@@ -15,6 +15,14 @@ export type Customer = {
   badBehavior: number
   creditLimit: number
   balance: number
+  behaviorEntries: BehaviorEntry[]
+}
+
+export type BehaviorEntry = {
+  id: string
+  type: 'good' | 'bad'
+  comment: string
+  date: string
 }
 
 export type SaleItem = {
@@ -27,7 +35,7 @@ export type SaleItem = {
 
 export type Transaction = {
   id: string
-  type: 'sale' | 'payment'
+  type: 'sale' | 'payment' | 'adjustment'
   customerId: string
   customerName: string
   date: string

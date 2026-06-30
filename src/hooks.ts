@@ -4,10 +4,21 @@ import type { StoreData } from './types'
 
 const KEY = 'mercadinho-amanda:v1'
 
+export function normalizeStoreData(data: StoreData): StoreData {
+  return {
+    ...data,
+    customers: data.customers.map((customer) => ({
+      ...customer,
+      behaviorEntries: Array.isArray(customer.behaviorEntries) ? customer.behaviorEntries : [],
+    })),
+  }
+}
+
 function readData(): StoreData {
   try {
     const stored = localStorage.getItem(KEY)
-    return stored ? JSON.parse(stored) : initialData
+    const parsed = stored ? JSON.parse(stored) as StoreData : initialData
+    return normalizeStoreData(parsed)
   } catch {
     return initialData
   }

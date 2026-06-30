@@ -26,12 +26,12 @@ import {
   X,
 } from 'lucide-react'
 import { dateTime, money, uid } from './data'
-import { useStore } from './hooks'
-import type { Customer, Product, SaleItem, StoreData, Transaction } from './types'
+import { normalizeStoreData, useStore } from './hooks'
+import type { BehaviorEntry, Customer, Product, SaleItem, StoreData, Transaction } from './types'
 
 type Page = 'inicio' | 'produtos' | 'clientes' | 'caixa' | 'historico'
 type ProductDraft = Omit<Product, 'id'>
-type CustomerDraft = Omit<Customer, 'id' | 'balance'>
+type CustomerDraft = Omit<Customer, 'id' | 'balance' | 'behaviorEntries'>
 
 const EmojiSelector = lazy(() => import('./EmojiSelector'))
 const CHECKOUT_CUSTOMER_PAGE_SIZE = 8
@@ -89,6 +89,7 @@ function App() {
   const [customerModal, setCustomerModal] = useState(false)
   const [editingProduct, setEditingProduct] = useState<Product | null>(null)
   const [editingCustomer, setEditingCustomer] = useState<Customer | null>(null)
+  const [behaviorModal, setBehaviorModal] = useState<{ customerId: string; type: BehaviorEntry['type'] } | null>(null)
   const [toast, setToast] = useState('')
   const importRef = useRef<HTMLInputElement>(null)
 
@@ -114,7 +115,7 @@ function App() {
       ...current,
       customers: editingCustomer
         ? current.customers.map((item) => item.id === editingCustomer.id ? { ...item, ...draft } : item)
-        : [...current.customers, { ...draft, balance: 0, id: uid() }],
+        : [...current.customers, { ...draft, balance: 0, behaviorEntries: [], id: uid() }],
     }))
     setCustomerModal(false)
     setEditingCustomer(null)
@@ -129,18 +130,55 @@ function App() {
 
   const deleteCustomer = (id: string) => {
     const customer = data.customers.find((item) => item.id === id)
-    if (customer?.balance) return notify('Quite o saldo antes de excluir este cliente.')
-    if (!confirm('Excluir este cliente? O histórico será preservado.')) return
-    setData((current) => ({ ...current, customers: current.customers.filter((item) => item.id !== id) }))
-    notify('Cliente removido.')
+    if (!customer) return
+    const hasBalance = customer.balance > 0
+    const message = hasBalance
+      ? `${customer.name} possui saldo pendente de ${money.format(customer.balance)}.\n\nAo excluir, o sistema fará uma baixa de encerramento e guardará esse ajuste no histórico. Deseja continuar?`
+      : `Excluir ${customer.name}? O histórico será preservado.`
+    if (!confirm(message)) return
+    setData((current) => {
+      const adjustment: Transaction | null = hasBalance
+        ? { id: uid(), type: 'adjustment', customerId: customer.id, customerName: customer.name, date: new Date().toISOString(), total: customer.balance }
+        : null
+      return {
+        ...current,
+        customers: current.customers.filter((item) => item.id !== id),
+        transactions: adjustment ? [adjustment, ...current.transactions] : current.transactions,
+      }
+    })
+    notify(hasBalance ? 'Cliente removido e saldo ajustado.' : 'Cliente removido.')
   }
 
-  const updateBehavior = (id: string, field: 'goodBehavior' | 'badBehavior', delta: number) => {
+  const addBehavior = (comment: string) => {
+    if (!behaviorModal) return
+    const field = behaviorModal.type === 'good' ? 'goodBehavior' : 'badBehavior'
+    const entry: BehaviorEntry = { id: uid(), type: behaviorModal.type, comment, date: new Date().toISOString() }
     setData((current) => ({
       ...current,
       customers: current.customers.map((item) =>
-        item.id === id ? { ...item, [field]: Math.max(0, item[field] + delta) } : item),
+        item.id === behaviorModal.customerId
+          ? { ...item, [field]: item[field] + 1, behaviorEntries: [entry, ...item.behaviorEntries] }
+          : item),
     }))
+    setBehaviorModal(null)
+    notify(behaviorModal.type === 'good' ? 'Boa atitude registrada! ⭐' : 'Ponto a melhorar registrado.')
+  }
+
+  const removeBehavior = (id: string, type: BehaviorEntry['type']) => {
+    const field = type === 'good' ? 'goodBehavior' : 'badBehavior'
+    const label = type === 'good' ? 'boa atitude' : 'ponto a melhorar'
+    if (!confirm(`Remover o registro mais recente de ${label}?`)) return
+    setData((current) => ({
+      ...current,
+      customers: current.customers.map((item) => {
+        if (item.id !== id || item[field] <= 0) return item
+        const entries = [...item.behaviorEntries]
+        const latestIndex = entries.findIndex((entry) => entry.type === type)
+        if (latestIndex >= 0) entries.splice(latestIndex, 1)
+        return { ...item, [field]: item[field] - 1, behaviorEntries: entries }
+      }),
+    }))
+    notify('Registro removido.')
   }
 
   const payBalance = (customer: Customer) => {
@@ -188,7 +226,7 @@ function App() {
       const parsed = JSON.parse(await file.text()) as StoreData
       if (!Array.isArray(parsed.products) || !Array.isArray(parsed.customers) || !Array.isArray(parsed.transactions)) throw new Error()
       if (!confirm('Substituir os dados atuais pelos dados deste backup?')) return
-      setData(parsed)
+      setData(normalizeStoreData(parsed))
       notify('Backup restaurado!')
     } catch {
       notify('Este arquivo não é um backup válido.')
@@ -233,7 +271,7 @@ function App() {
         <div className="content">
           {page === 'inicio' && <Dashboard data={data} navigate={navigate} />}
           {page === 'produtos' && <Products products={data.products} onAdd={() => { setEditingProduct(null); setProductModal(true) }} onEdit={(item) => { setEditingProduct(item); setProductModal(true) }} onDelete={deleteProduct} />}
-          {page === 'clientes' && <Customers customers={data.customers} onAdd={() => { setEditingCustomer(null); setCustomerModal(true) }} onEdit={(item) => { setEditingCustomer(item); setCustomerModal(true) }} onDelete={deleteCustomer} onBehavior={updateBehavior} onPay={payBalance} />}
+          {page === 'clientes' && <Customers customers={data.customers} onAdd={() => { setEditingCustomer(null); setCustomerModal(true) }} onEdit={(item) => { setEditingCustomer(item); setCustomerModal(true) }} onDelete={deleteCustomer} onAddBehavior={(customerId, type) => setBehaviorModal({ customerId, type })} onRemoveBehavior={removeBehavior} onPay={payBalance} />}
           {page === 'caixa' && <Checkout products={data.products} customers={data.customers} onFinish={finishSale} />}
           {page === 'historico' && <Transactions transactions={data.transactions} />}
         </div>
@@ -241,6 +279,7 @@ function App() {
 
       {productModal && <ProductForm product={editingProduct} onClose={() => { setProductModal(false); setEditingProduct(null) }} onSave={saveProduct} />}
       {customerModal && <CustomerForm customer={editingCustomer} onClose={() => { setCustomerModal(false); setEditingCustomer(null) }} onSave={saveCustomer} />}
+      {behaviorModal && <BehaviorForm customer={data.customers.find((item) => item.id === behaviorModal.customerId)!} type={behaviorModal.type} onClose={() => setBehaviorModal(null)} onSave={addBehavior} />}
       {toast && <div className="toast"><Check size={18} /> {toast}</div>}
     </div>
   )
@@ -270,7 +309,7 @@ function Dashboard({ data, navigate }: { data: StoreData; navigate: (page: Page)
         </article>
         <article className="panel">
           <div className="panel-head"><div><span className="eyebrow">Movimento</span><h3>Últimas atividades</h3></div><button className="text-button" onClick={() => navigate('historico')}>Ver tudo <ChevronRight size={16} /></button></div>
-          {data.transactions.length ? <div className="mini-list activity">{data.transactions.slice(0, 5).map((item) => <div key={item.id}><span className="emoji-box">{item.type === 'sale' ? '🛍️' : '🪙'}</span><div><strong>{item.type === 'sale' ? `Venda para ${item.customerName}` : `Pagamento de ${item.customerName}`}</strong><small>{dateTime.format(new Date(item.date))}</small></div><b className={item.type === 'payment' ? 'positive' : ''}>{item.type === 'payment' ? '−' : '+'}{money.format(item.total)}</b></div>)}</div> : <EmptyState emoji="🧾" title="Tudo quietinho por aqui" text="As vendas e pagamentos vão aparecer aqui." />}
+          {data.transactions.length ? <div className="mini-list activity">{data.transactions.slice(0, 5).map((item) => <div key={item.id}><span className="emoji-box">{item.type === 'sale' ? '🛍️' : item.type === 'payment' ? '🪙' : '⚖️'}</span><div><strong>{item.type === 'sale' ? `Venda para ${item.customerName}` : item.type === 'payment' ? `Pagamento de ${item.customerName}` : `Ajuste de ${item.customerName}`}</strong><small>{dateTime.format(new Date(item.date))}</small></div><b className={item.type !== 'sale' ? 'positive' : ''}>{item.type === 'sale' ? '+' : '−'}{money.format(item.total)}</b></div>)}</div> : <EmptyState emoji="🧾" title="Tudo quietinho por aqui" text="As vendas, pagamentos e ajustes vão aparecer aqui." />}
         </article>
       </section>
     </>
@@ -289,24 +328,56 @@ function Products({ products, onAdd, onEdit, onDelete }: { products: Product[]; 
   )
 }
 
-function Customers({ customers, onAdd, onEdit, onDelete, onBehavior, onPay }: { customers: Customer[]; onAdd: () => void; onEdit: (c: Customer) => void; onDelete: (id: string) => void; onBehavior: (id: string, field: 'goodBehavior' | 'badBehavior', delta: number) => void; onPay: (c: Customer) => void }) {
+function Customers({ customers, onAdd, onEdit, onDelete, onAddBehavior, onRemoveBehavior, onPay }: {
+  customers: Customer[]
+  onAdd: () => void
+  onEdit: (customer: Customer) => void
+  onDelete: (id: string) => void
+  onAddBehavior: (id: string, type: BehaviorEntry['type']) => void
+  onRemoveBehavior: (id: string, type: BehaviorEntry['type']) => void
+  onPay: (customer: Customer) => void
+}) {
   const [search, setSearch] = useState('')
-  const filtered = customers.filter((item) => item.name.toLowerCase().includes(search.toLowerCase()))
+  const [profileId, setProfileId] = useState<string | null>(null)
+  const filtered = customers.filter((item) => matchesSearch(search, item.name, item.age, ...item.behaviorEntries.map((entry) => entry.comment)))
+  const profileCustomer = customers.find((item) => item.id === profileId)
   return (
-    <section className="page-section">
-      <div className="section-intro"><div><span className="eyebrow">Turminha</span><h2>Clientes e crédito</h2><p>Acompanhe o crédito, o saldo e as atitudes de cada criança.</p></div><button className="primary" onClick={onAdd}><UserRoundPlus /> Novo cliente</button></div>
-      <div className="toolbar"><label className="search"><Search size={19} /><input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Buscar cliente..." /></label><span>{filtered.length} {filtered.length === 1 ? 'cliente' : 'clientes'}</span></div>
-      {filtered.length ? <div className="customer-grid">{filtered.map((item) => {
-        const available = Math.max(0, item.creditLimit - item.balance)
-        const percent = item.creditLimit ? Math.min(100, (item.balance / item.creditLimit) * 100) : 0
-        return <article className="customer-card" key={item.id}>
-          <div className="customer-top"><div className="avatar">{item.emoji}</div><div><h3>{item.name}</h3><span>{item.age} anos</span></div><button className="dots" onClick={() => onEdit(item)}>Editar</button></div>
-          <div className="credit-box"><div><span>Saldo usado</span><strong>{money.format(item.balance)}</strong></div><div><span>Disponível</span><b>{money.format(available)}</b></div><div className="progress"><i style={{ width: `${percent}%` }} /></div><small>Limite de {money.format(item.creditLimit)}</small></div>
-          <div className="behavior-row"><div><span>⭐ Boas atitudes</span><div><button onClick={() => onBehavior(item.id, 'goodBehavior', -1)}><Minus /></button><strong>{item.goodBehavior}</strong><button onClick={() => onBehavior(item.id, 'goodBehavior', 1)}><Plus /></button></div></div><div><span>🌧️ A melhorar</span><div><button onClick={() => onBehavior(item.id, 'badBehavior', -1)}><Minus /></button><strong>{item.badBehavior}</strong><button onClick={() => onBehavior(item.id, 'badBehavior', 1)}><Plus /></button></div></div></div>
-          <div className="card-actions"><button disabled={item.balance <= 0} onClick={() => onPay(item)}><CircleDollarSign size={17} /> Registrar pagamento</button><button className="danger-button" onClick={() => onDelete(item.id)} aria-label={`Excluir ${item.name}`}><Trash2 size={17} /></button></div>
-        </article>
-      })}</div> : <EmptyState emoji="👋" title="Nenhum cliente encontrado" text="Cadastre uma criança para começar." />}
-    </section>
+    <>
+      <section className="page-section">
+        <div className="section-intro"><div><span className="eyebrow">Turminha</span><h2>Clientes e crédito</h2><p>Acompanhe o crédito, o saldo e as atitudes de cada criança.</p></div><button className="primary" onClick={onAdd}><UserRoundPlus /> Novo cliente</button></div>
+        <div className="toolbar"><label className="search"><Search size={19} /><input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Buscar cliente ou comentário..." /></label><span>{filtered.length} {filtered.length === 1 ? 'cliente' : 'clientes'}</span></div>
+        {filtered.length ? <div className="customer-grid">{filtered.map((item) => {
+          const available = Math.max(0, item.creditLimit - item.balance)
+          const percent = item.creditLimit ? Math.min(100, (item.balance / item.creditLimit) * 100) : 0
+          const latestEntry = item.behaviorEntries[0]
+          return <article className="customer-card" key={item.id}>
+            <div className="customer-top"><div className="avatar">{item.emoji}</div><div><h3>{item.name}</h3><span>{item.age} anos</span></div><div className="customer-top-actions"><button className="dots profile-button" onClick={() => setProfileId(item.id)}>Ver perfil</button><button className="dots" onClick={() => onEdit(item)}>Editar</button></div></div>
+            <div className="credit-box"><div><span>Saldo usado</span><strong>{money.format(item.balance)}</strong></div><div><span>Disponível</span><b>{money.format(available)}</b></div><div className="progress"><i style={{ width: `${percent}%` }} /></div><small>Limite de {money.format(item.creditLimit)}</small></div>
+            <div className="behavior-row">
+              <div><span>⭐ Boas atitudes</span><div><button disabled={item.goodBehavior <= 0} onClick={() => onRemoveBehavior(item.id, 'good')} aria-label={`Remover boa atitude de ${item.name}`}><Minus /></button><strong>{item.goodBehavior}</strong><button onClick={() => onAddBehavior(item.id, 'good')} aria-label={`Adicionar boa atitude para ${item.name}`}><Plus /></button></div></div>
+              <div><span>🌧️ A melhorar</span><div><button disabled={item.badBehavior <= 0} onClick={() => onRemoveBehavior(item.id, 'bad')} aria-label={`Remover ponto a melhorar de ${item.name}`}><Minus /></button><strong>{item.badBehavior}</strong><button onClick={() => onAddBehavior(item.id, 'bad')} aria-label={`Adicionar ponto a melhorar para ${item.name}`}><Plus /></button></div></div>
+            </div>
+            {latestEntry && <button className={`behavior-preview ${latestEntry.type}`} onClick={() => setProfileId(item.id)}><span>{latestEntry.type === 'good' ? '⭐' : '🌧️'}</span><div><small>Registro mais recente</small><strong>{latestEntry.comment}</strong></div><ChevronRight /></button>}
+            <div className="card-actions"><button disabled={item.balance <= 0} onClick={() => onPay(item)}><CircleDollarSign size={17} /> Registrar pagamento</button><button className="danger-button" onClick={() => onDelete(item.id)} aria-label={`Excluir ${item.name}`}><Trash2 size={17} /></button></div>
+          </article>
+        })}</div> : <EmptyState emoji="👋" title="Nenhum cliente encontrado" text="Cadastre uma criança para começar." />}
+      </section>
+      {profileCustomer && <CustomerProfile customer={profileCustomer} onClose={() => setProfileId(null)} />}
+    </>
+  )
+}
+
+function CustomerProfile({ customer, onClose }: { customer: Customer; onClose: () => void }) {
+  return (
+    <Modal title={`Perfil de ${customer.name}`} onClose={onClose}>
+      <div className="customer-profile">
+        <div className="profile-identity"><div className="avatar large">{customer.emoji}</div><div><h3>{customer.name}</h3><p>{customer.age} anos · Crédito disponível: {money.format(Math.max(0, customer.creditLimit - customer.balance))}</p></div></div>
+        <div className="profile-summary"><div><span>⭐</span><strong>{customer.goodBehavior}</strong><small>Boas atitudes</small></div><div><span>🌧️</span><strong>{customer.badBehavior}</strong><small>A melhorar</small></div></div>
+        <div className="profile-history-head"><div><span className="eyebrow">Acompanhamento</span><h3>Histórico de comportamento</h3></div><small>{customer.behaviorEntries.length} com comentário</small></div>
+        {customer.behaviorEntries.length ? <div className="behavior-timeline">{customer.behaviorEntries.map((entry) => <article className={entry.type} key={entry.id}><span>{entry.type === 'good' ? '⭐' : '🌧️'}</span><div><strong>{entry.type === 'good' ? 'Boa atitude' : 'Ponto a melhorar'}</strong><p>{entry.comment}</p><small>{dateTime.format(new Date(entry.date))}</small></div></article>)}</div> : <EmptyState emoji="📝" title="Nenhum comentário ainda" text="Os próximos registros de comportamento aparecerão aqui." />}
+        {customer.goodBehavior + customer.badBehavior > customer.behaviorEntries.length && <p className="legacy-note">Os totais também incluem registros antigos, criados antes do histórico com comentários.</p>}
+      </div>
+    </Modal>
   )
 }
 
@@ -384,14 +455,37 @@ function Checkout({ products, customers, onFinish }: { products: Product[]; cust
 }
 
 function Transactions({ transactions }: { transactions: Transaction[] }) {
-  const [filter, setFilter] = useState<'all' | 'sale' | 'payment'>('all')
+  const [filter, setFilter] = useState<'all' | Transaction['type']>('all')
   const list = transactions.filter((item) => filter === 'all' || item.type === filter)
   return (
     <section className="page-section">
-      <div className="section-intro"><div><span className="eyebrow">Caderneta</span><h2>Histórico do mercadinho</h2><p>Todas as compras e pagamentos ficam guardados aqui.</p></div></div>
-      <div className="filter-tabs"><button className={filter === 'all' ? 'active' : ''} onClick={() => setFilter('all')}>Tudo</button><button className={filter === 'sale' ? 'active' : ''} onClick={() => setFilter('sale')}>Vendas</button><button className={filter === 'payment' ? 'active' : ''} onClick={() => setFilter('payment')}>Pagamentos</button></div>
-      {list.length ? <div className="transaction-list">{list.map((item) => <article key={item.id}><span className={`transaction-icon ${item.type}`}>{item.type === 'sale' ? '🛍️' : '🪙'}</span><div className="transaction-main"><span className="transaction-type">{item.type === 'sale' ? 'Venda' : 'Pagamento'}</span><h3>{item.customerName}</h3><small>{dateTime.format(new Date(item.date))}</small>{item.items && <p>{item.items.map((part) => `${part.quantity}× ${part.name}`).join(' · ')}</p>}</div><strong className={item.type === 'payment' ? 'positive' : ''}>{item.type === 'payment' ? '−' : '+'}{money.format(item.total)}</strong></article>)}</div> : <EmptyState emoji="🧾" title="Nada registrado ainda" text="As atividades do caixa aparecerão aqui." />}
+      <div className="section-intro"><div><span className="eyebrow">Caderneta</span><h2>Histórico do mercadinho</h2><p>Todas as compras, pagamentos e baixas ficam guardados aqui.</p></div></div>
+      <div className="filter-tabs"><button className={filter === 'all' ? 'active' : ''} onClick={() => setFilter('all')}>Tudo</button><button className={filter === 'sale' ? 'active' : ''} onClick={() => setFilter('sale')}>Vendas</button><button className={filter === 'payment' ? 'active' : ''} onClick={() => setFilter('payment')}>Pagamentos</button><button className={filter === 'adjustment' ? 'active' : ''} onClick={() => setFilter('adjustment')}>Ajustes</button></div>
+      {list.length ? <div className="transaction-list">{list.map((item) => <article key={item.id}><span className={`transaction-icon ${item.type}`}>{item.type === 'sale' ? '🛍️' : item.type === 'payment' ? '🪙' : '⚖️'}</span><div className="transaction-main"><span className="transaction-type">{item.type === 'sale' ? 'Venda' : item.type === 'payment' ? 'Pagamento' : 'Baixa de encerramento'}</span><h3>{item.customerName}</h3><small>{dateTime.format(new Date(item.date))}</small>{item.items && <p>{item.items.map((part) => `${part.quantity}× ${part.name}`).join(' · ')}</p>}{item.type === 'adjustment' && <p>Saldo ajustado na exclusão do cliente.</p>}</div><strong className={item.type !== 'sale' ? 'positive' : ''}>{item.type === 'sale' ? '+' : '−'}{money.format(item.total)}</strong></article>)}</div> : <EmptyState emoji="🧾" title="Nada registrado ainda" text="As atividades do caixa aparecerão aqui." />}
     </section>
+  )
+}
+
+function BehaviorForm({ customer, type, onClose, onSave }: { customer: Customer; type: BehaviorEntry['type']; onClose: () => void; onSave: (comment: string) => void }) {
+  const [comment, setComment] = useState('')
+  const isGood = type === 'good'
+  const submit = (event: React.FormEvent) => {
+    event.preventDefault()
+    const cleanComment = comment.trim()
+    if (cleanComment) onSave(cleanComment)
+  }
+
+  return (
+    <Modal title={isGood ? 'Registrar boa atitude' : 'Registrar ponto a melhorar'} onClose={onClose}>
+      <form className="form behavior-form" onSubmit={submit}>
+        <div className={`behavior-form-intro ${type}`}><span>{isGood ? '⭐' : '🌧️'}</span><div><strong>{customer.name}</strong><p>{isGood ? 'Conte o que a criança fez de positivo.' : 'Descreva com cuidado o que pode ser melhorado.'}</p></div></div>
+        <label>Comentário obrigatório
+          <textarea autoFocus required minLength={3} maxLength={300} value={comment} onChange={(event) => setComment(event.target.value)} placeholder={isGood ? 'Ex.: Ajudou um colega a organizar os materiais.' : 'Ex.: Interrompeu a explicação e combinamos ouvir até o final.'} />
+          <small className="character-count">{comment.length}/300</small>
+        </label>
+        <div className="form-actions"><button type="button" onClick={onClose}>Cancelar</button><button className="primary" type="submit" disabled={comment.trim().length < 3}><Check /> Salvar registro</button></div>
+      </form>
+    </Modal>
   )
 }
 

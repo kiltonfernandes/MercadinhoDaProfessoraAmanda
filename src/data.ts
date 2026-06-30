@@ -8,8 +8,8 @@ export const initialData: StoreData = {
     { id: 'p4', name: 'Biscoito', emoji: '🍪', price: 2, stock: 5 },
   ],
   customers: [
-    { id: 'c1', name: 'Lia', age: 8, emoji: '🧒🏽', goodBehavior: 5, badBehavior: 1, creditLimit: 30, balance: 0 },
-    { id: 'c2', name: 'Davi', age: 9, emoji: '👦🏻', goodBehavior: 3, badBehavior: 0, creditLimit: 25, balance: 6 },
+    { id: 'c1', name: 'Lia', age: 8, emoji: '🧒🏽', goodBehavior: 5, badBehavior: 1, creditLimit: 30, balance: 0, behaviorEntries: [] },
+    { id: 'c2', name: 'Davi', age: 9, emoji: '👦🏻', goodBehavior: 3, badBehavior: 0, creditLimit: 25, balance: 6, behaviorEntries: [] },
   ],
   transactions: [],
 }
